@@ -1,3 +1,5 @@
+# Picked the Python gitignore from github.  Generated all this stuff:
+#
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -127,3 +129,11 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+############################## new stuff ##########################################
+virt
+#vim swap files
+[._]*.sw[a-p]
+.vscode
+.nvmrc
+tmp

@@ -1,0 +1,12 @@
+[
+	{
+		"id": "2b61ea55-bacf-453e-a61b-b7c7bf5405fd",
+		"name": "contracts",
+		"type": "application/vnd.ibm.kms.key+json",
+		"createdBy": "IBMid-27000590VS",
+		"creationDate": "2019-08-02T13:30:02Z",
+		"extractable": false,
+		"state": 1,
+		"crn": "crn:v1:bluemix:public:kms:us-south:a/713c783d9a507a53135fe6793c37cc74:22ec6eba-770c-44fc-9d2f-ab5661c6413f:key:2b61ea55-bacf-453e-a61b-b7c7bf5405fd"
+	}
+]

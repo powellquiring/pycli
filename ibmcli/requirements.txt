@@ -1,0 +1,13 @@
+attrs==19.3.0
+Click==7.0
+-e git+git@github.com:powellquiring/pycli.git@9e4dc3f58d7730c3161f9f4df3ff1dc0f9680003#egg=ibmcli&subdirectory=ibmcli
+importlib-metadata==1.5.0
+more-itertools==8.2.0
+packaging==20.3
+pluggy==0.13.1
+py==1.8.1
+pyparsing==2.4.6
+pytest==5.3.5
+six==1.14.0
+wcwidth==0.1.8
+zipp==3.1.0

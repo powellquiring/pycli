@@ -1,0 +1,2 @@
+Click==7.0
+-e git+git@github.com:powellquiring/pycli.git@9e4dc3f58d7730c3161f9f4df3ff1dc0f9680003#egg=icl&subdirectory=iclogin
