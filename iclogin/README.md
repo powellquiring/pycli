@@ -7,8 +7,8 @@ git clone ...
 cd pycli/iclogin
 python3 -m venv venv
 source venv/bin/activate
-pip install -e .
 pip install -r requirements.txt
+pip install -e .
 which ibmcli
 
 # usage
