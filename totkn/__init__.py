@@ -4,13 +4,18 @@ from .totkn import (
     ParamEnum,
     Param,
     Pipeline,
+    PipelineTask,
     TaskRef,
     TaskRun,
     TaskSpec,
-    T2,
+    MissingAttribute,
+    TriggerTemplate,
+    TriggerTemplateSpec,
+    PipelineRef,
+    PipelineRun,
+    TriggerTemplate,
+    TriggerTemplateSpec,
 )
-from .t import (
-    TT,
-)
+from .t import TT
 
 __version__ = "0.1.0"

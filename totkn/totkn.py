@@ -1,153 +1,80 @@
 import yaml
 from typing import List, Union, List, Any, Dict, Tuple
 import typing
-import collections
 import enum
-import abc
+import attr
+import attrs_strict
+from attrs_strict import type_validator
+
+
+class MissingAttribute(Exception):
+    pass
 
 
 def yaml_dump(d):
     return yaml.dump(d, Dumper=yaml.Dumper)
 
 
-def is_list(typ) -> bool:
-    return typ._name == "List"
+def self_attributes(self, attrs):
+    return {attr.name: getattr(self, attr.name) for attr in attrs}
 
 
-class Base(abc.ABC):
-    def __init__(self):
-        for (prop, type_required) in self.props:
-            typ = type_required[0]
-            # required = type_required[1]
-            if is_list(typ):
-                self.__setattr__(typ, list())
+@attr.s
+class FileObject:
+    name: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    description: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    apiVersion: str = attr.ib(default="tekton.dev/v1beta1", validator=type_validator())
 
-    @property
-    @abc.abstractmethod
-    def props(self) -> Dict[str, Tuple[Any, bool]]:
-        return {}
+    def asdict(self):
+        def get_delete(d, key):
+            v = d[key]
+            del d[key]
+            return v
 
-    def to_dict(self):
-        ret = {}
-        for key, (_, required) in list(self.props.items()):
-            if hasattr(self, key):
-                val = self.__getattribute__(key)
-                if isinstance(val, enum.Enum):
-                    ret[key] = val.name
-                else:
-                    ret[key] = val
-            else:
-                if required:
-                    type_name = self.__class__.__name__
-                    raise ValueError(f"Resource {key} required in type {type_name}")
-        return ret
+        def transform_fileobject(d):
+            if isinstance(d, dict):
+                if "apiVersion" in d:
+                    # If there is an apiVersion it is a file object.  Rearrange attributes
+                    # Move all keys to the spec
+                    spec = {}
+                    for (key, val) in d.items():
+                        spec[key] = val
+                    for (key, val) in spec.items():
+                        del d[key]
+                    # create the file level attributes
+                    d["metadata"] = {"name": get_delete(spec, "name")}
+                    if "description" in spec:
+                        d["metadata"]["description"] = get_delete(spec, "description")
+                    d["kind"] = get_delete(spec, "kind")
+                    d["apiVersion"] = get_delete(spec, "apiVersion")
+                    d["spec"] = spec
+                for (key, val) in d.items():
+                    transform_fileobject(val)
+            if isinstance(d, list):
+                for i in d:
+                    transform_fileobject(i)
 
-    def to_yaml(self):
-        return yaml_dump(self.to_dict())
+        root = attr.asdict(self, filter=lambda attr, value: value != None)
+        transform_fileobject(root)
+        return root
 
-
-class FileObject(Base):
-    apiVersion = "tekton.dev/v1alpha1"
-
-    specs: Dict[str, Union[Any, bool]] = {}  # override in derived class
-    _props = {
-        "name": (str, True),
-        "description": (str, False),
-    }
-
-    # [[[cog
-    # import coghelp
-    # import totkn
-    # coghelp.class_props(totkn.FileObject)
-    # ]]]
-
-    # [[[end]]]
-
-    def to_base_types(self, o):
-        if hasattr(o, "to_dict"):
-            return o.to_dict()
-        if isinstance(o, list):
-            return [self.to_base_types(i) for i in o]
-        return o
-
-    def to_dict(self):
-        """The base class dictionary is in a flat format with all attriabutes in the object"""
-        selfd = super().to_dict()
-        # now generate the tekton format
-        ret = {
-            "metadata": {"name": self.name},
-            "kind": self.kind,
-            "apiVersion": self.apiVersion,
-        }
-        for key, (typ, required) in list(self.specs.items()):
-            l = self.__getattribute__(key)
-            if len(l) > 0:
-                if not "spec" in ret:
-                    ret["spec"] = {}
-                base = self.to_base_types(l)
-                ret["spec"][key] = base
-            else:
-                if required:
-                    type_name = self.__class__.__name__
-                    r = f"Resource {key} required in type {type_name}"
-                    if hasattr(self, "name"):
-                        r = r + f" name {self.name}"
-                    raise ValueError(r)
-
-        return ret
-
-    def to_yaml(self):
-        return yaml_dump(self.to_dict())
+    def to_yaml(self, **kwargs):
+        if kwargs.get("check", True):
+            self.semantic_check()
+        return yaml_dump(self.asdict())
 
 
-class Step(Base):
-    _props = {
-        "image": (str, True),
-        "args": (str, False),
-        "command": (str, False),
-        "env": (str, False),
-    }
-    # [[[cog
-    # import coghelp
-    # import totkn
-    # ]]]
-    # [[[end]]]
+@attr.s
+class FileObjectAlpha(FileObject):
+    apiVersion: str = attr.ib(default="tekton.dev/v1alpha1", validator=type_validator())
 
-    def to_base_types(self, o):
-        if hasattr(o, "to_dict"):
-            return o.to_dict()
-        if isinstance(o, list):
-            return [self.to_base_types(i) for i in o]
-        return o
 
-    def to_dict(self):
-        """The base class dictionary is in a flat format with all attriabutes in the object"""
-        selfd = super().to_dict()
-        # now generate the tekton format
-        ret = {
-            "metadata": {"name": self.name},
-            "kind": self.kind,
-            "apiVersion": self.apiVersion,
-        }
-        for key, (typ, required) in list(self.specs.items()):
-            l = self.__getattribute__(key)
-            if len(l) > 0:
-                if not "spec" in ret:
-                    ret["spec"] = {}
-                base = self.to_base_types(l)
-                ret["spec"][key] = base
-            else:
-                if required:
-                    type_name = self.__class__.__name__
-                    r = f"Resource {key} required in type {type_name}"
-                    if hasattr(self, "name"):
-                        r = r + f" name {self.name}"
-                    raise ValueError(r)
-
-        return ret
-
-    def to_yaml(self):
-        return yaml_dump(self.to_dict())
+@attr.s
+class Step:
+    image: str = attr.ib(default=None, validator=type_validator())
+    args: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    command: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    env: Union[str, None] = attr.ib(default=None, validator=type_validator())
 
 
 class ParamEnum(enum.Enum):
@@ -155,107 +82,125 @@ class ParamEnum(enum.Enum):
     list = enum.auto()
 
 
-class Param(Base):
-    _props = {
-        "name": (str, True),
-        "description": (str, False),
-        "default": (str, False),
-        "type": (ParamEnum, False),
-    }
-
-    # [[[cog
-    # import coghelp
-    # import totkn
-    # coghelp.class_props(totkn.Param)
-    # ]]]
-
-    # [[[end]]]
-
-
-class TaskRef:
-    _props = {}
+@attr.s
+class Param:
+    name: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    description: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    default: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    type: Union[ParamEnum, None] = attr.ib(default=None, validator=type_validator())
 
 
 class Inputs:
-    _props = {}
+    pass
 
 
 class Resources:
-    _props = {}
+    pass
 
 
-class TaskSpec(Base):
-    _props = {
-        "steps": (List[Step], True),
-        "params": (List[Param], False),
-        "resources": (List[Resources], False),
-    }
-    # [[[cog
-    # import coghelp
-    # import totkn
-    # coghelp.class_props(totkn.TaskSpec)
-    # ]]]
-
-    # [[[end]]]
+@attr.s
+class TaskSpec:
+    steps: Union[None, List[Step]] = attr.ib(default=None, validator=type_validator())
+    params: Union[None, List[Param]] = attr.ib(default=None, validator=type_validator())
+    resources: Union[None, List[Resources]] = attr.ib(
+        default=None, validator=type_validator()
+    )
 
 
 class TaskRun(FileObject):
-    _props = {}
+    pass
 
 
+@attr.s
+class TaskRef:
+    name: Union[str, None] = attr.ib(default=None, validator=type_validator())
+
+
+@attr.s
 class Task(FileObject, TaskSpec):
-    """Task has the TaskSpec properties at the level of the Task.  It might be more logical
-    to put it as a a child of the Task under the property 'spec' but that makes it more verbose"""
+    kind: str = attr.ib(default="Task", validator=type_validator())
 
-    kind = "Task"
+    def ref(self) -> TaskRef:
+        tr = TaskRef()
+        tr.name = self.name
+        return tr
 
-    def to_dict(self):
-        file_dict = FileObject.to_dict(self)
-        file_dict["spec"] = TaskSpec.to_dict(self)
+    def semantic_check(self):
+        if self.steps == None or len(self.steps) == 0:
+            raise MissingAttribute("Task object must have at least one step")
 
 
-class Pipeline(FileObject):
-    _props = {"tasks": (Union[TaskSpec, TaskRef], False)}
-    # [[[cog
-    # import coghelp
-    # import totkn
-    # coghelp.class_props(totkn.Pipeline)
-    # ]]]
+@attr.s
+class PipelineTask:
+    name: Union[str, None] = attr.ib(default=None, validator=type_validator())
+    taskRef: Union[None, TaskRef] = attr.ib(default=None, validator=type_validator())
+    params: Union[None, List[Param]] = attr.ib(default=None, validator=type_validator())
 
-    # [[[end]]]
 
-    def to_base_types(self, o):
-        if hasattr(o, "to_dict"):
-            return o.to_dict()
-        if isinstance(o, list):
-            return [self.to_base_types(i) for i in o]
-        return o
+@attr.s
+class PipelineSpec:
+    tasks: Union[None, List[PipelineTask]] = attr.ib(
+        default=None, validator=type_validator()
+    )
 
-    def to_dict(self):
-        """The base class dictionary is in a flat format with all attriabutes in the object"""
-        selfd = super().to_dict()
-        # now generate the tekton format
-        ret = {
-            "metadata": {"name": self.name},
-            "kind": self.kind,
-            "apiVersion": self.apiVersion,
-        }
-        for key, (typ, required) in list(self.specs.items()):
-            l = self.__getattribute__(key)
-            if len(l) > 0:
-                if not "spec" in ret:
-                    ret["spec"] = {}
-                base = self.to_base_types(l)
-                ret["spec"][key] = base
-            else:
-                if required:
-                    type_name = self.__class__.__name__
-                    r = f"Resource {key} required in type {type_name}"
-                    if hasattr(self, "name"):
-                        r = r + f" name {self.name}"
-                    raise ValueError(r)
 
-        return ret
+@attr.s
+class PipelineRef:
+    name: str = attr.ib(default=None, validator=type_validator())
 
-    def to_yaml(self):
-        return yaml_dump(self.to_dict())
+
+@attr.s
+class Pipeline(FileObject, PipelineSpec):
+    kind: str = attr.ib(default="Pipeline", validator=type_validator())
+
+    def semantic_check(self):
+        pass
+
+    def ref(self) -> PipelineRef:
+        return PipelineRef(self.name)
+
+
+@attr.s
+class PipelineRunSpec:
+    params: Union[None, List[Param]] = attr.ib(default=None, validator=type_validator())
+    pipelineRef: Union[None, PipelineRef] = attr.ib(
+        default=None, validator=type_validator()
+    )
+    pipelineSpec: Union[None, PipelineSpec] = attr.ib(
+        default=None, validator=type_validator()
+    )
+    serviceAccountName: Union[None, str] = attr.ib(
+        default=None, validator=type_validator()
+    )
+
+
+@attr.s
+class PipelineRun(FileObject, PipelineRunSpec):
+    kind: str = attr.ib(default="PipelineRun", validator=type_validator())
+
+    def semantic_check(self):
+        pass
+
+
+# TriggerResourceTemplates = Union[PipelineRun, ...]
+TriggerResourceTemplates = PipelineRun
+
+
+@attr.s
+class TriggerTemplateSpec:
+    resourcetemplates: Union[None, List[TriggerResourceTemplates]] = attr.ib(
+        default=None, validator=type_validator()
+    )
+    params: Union[None, List[Param]] = attr.ib(default=None, validator=type_validator())
+
+
+@attr.s
+class TriggerTemplate(FileObjectAlpha, TriggerTemplateSpec):
+    kind: str = attr.ib(default="TriggerTemplate", validator=type_validator())
+
+    #    spec: Union[None, TriggerTemplateSpec] = attr.ib(
+    #        default=None, validator=type_validator()
+    #    )
+
+    def semantic_check(self):
+        pass
