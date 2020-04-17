@@ -19,7 +19,7 @@ editable:
 	pip install -e .
 
 mypy:
-	mypy *.py test
+	mypy *.py test examples/lab*
 
 tktn01:
 	kubectl apply -f tktn01.yaml

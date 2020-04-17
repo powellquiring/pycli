@@ -8,6 +8,12 @@ import yaml
 import attr
 
 
+def test_syntax() -> None:
+    p = Pipeline(name="pl")
+    s = p.to_yaml()
+    click.echo(s)
+
+
 def verify(expected, tekton_obj) -> None:
     if type(expected) == str:
         expected = yaml.load(expected, Loader=yaml.SafeLoader)
@@ -41,6 +47,34 @@ def test_task_str() -> None:
     task = totkn.Task("mytask")
     task.steps = [step]
     verify(ubuntu_task_str, task)
+
+
+def test_task_steps() -> None:
+    step = totkn.Step()
+    step.image = "ubuntu"
+    step.name = "echo"
+    step.command = ["echo"]
+    step.args = ["01 version"]
+    task = totkn.Task("the-task")
+    task.steps = [step]
+    verify(
+        """
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: the-task
+spec:
+  steps:
+    - name: echo
+      image: ubuntu
+      command:
+        - echo
+      args:
+        - "01 version"
+
+""",
+        task,
+    )
 
 
 def test_task_missing_step() -> None:
@@ -116,24 +150,60 @@ spec:
     )
 
 
+def test_trigger_exception() -> None:
+    tt = TriggerTemplate()
+    pr = PipelineRun("pipelinerun-$(uid)")
+    tt.resourcetemplates = [pr]
+    try:
+        tt.to_yaml()
+    except Exception as e:
+        assert isinstance(e, MissingAttribute)
+        return
+    assert False
+
+
+def test_trigger_binding() -> None:
+    tb = TriggerBinding("theTriggerBinding")
+    verify(
+        """
+apiVersion: tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: theTriggerBinding
+""",
+        tb,
+    )
+
+
+def test_event_listener() -> None:
+    el = EventListener("the-listener")
+    elt = EventListenerTrigger(
+        binding=Ref("theTriggerBinding"), template=Ref("theTemplateTrigger")
+    )
+    el.triggers = [elt]
+    verify(
+        """
+apiVersion: tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: the-listener
+spec:
+  triggers:
+    - binding:
+        name: theTriggerBinding
+      template:
+        name: theTemplateTrigger
+""",
+        el,
+    )
+
+
 def task_dict(name):
     return {
         "apiVersion": "tekton.dev/v1beta1",
         "kind": "Task",
         "metadata": {"name": name,},
     }
-
-
-def xtest_task_dict():
-    task = totkn.Task("secret-env-task")
-    verify(task_dict("secret-env-task"), task)
-
-
-from typing import List
-
-
-def astr(a: str):
-    pass
 
 
 def xtest_task_description():
@@ -150,19 +220,27 @@ def xtest_task_description():
     verify(d, t2)
 
 
-def ztest_2():
-    task = totkn.Task("secret-env-task")
-    task_dict().update(
-        {
-            "spec": {
-                "steps": [
-                    {
-                        "name": "echo",
-                        "image": "ubuntu",
-                        "command": "echo",
-                        "args": "hello",
-                    },
-                ]
-            }
-        }
-    )
+import examples.lab1_simple.gen as lab1
+import examples.lab2_parameters.gen as lab2
+
+
+def lab_test(gen, fs) -> None:
+    expected = []
+    with open(fs + "/expected.yaml") as f:
+        for doc in yaml.load_all(f, Loader=yaml.SafeLoader):
+            expected.append(doc)
+    s = gen()
+    actual = []
+    for doc in yaml.load_all(s, Loader=yaml.SafeLoader):
+        actual.append(doc)
+    for i in range(0, len(actual)):
+        assert expected[i] == actual[i]
+    assert len(expected) == len(actual)
+
+
+def test_example_lab1() -> None:
+    lab_test(lab1.gen, "examples/lab1_simple")
+
+
+def test_example_lab2() -> None:
+    lab_test(lab2.gen, "examples/lab2_parameters")

@@ -5,16 +5,17 @@ from .totkn import (
     Param,
     Pipeline,
     PipelineTask,
-    TaskRef,
+    Ref,
     TaskRun,
     TaskSpec,
     MissingAttribute,
     TriggerTemplate,
     TriggerTemplateSpec,
-    PipelineRef,
     PipelineRun,
     TriggerTemplate,
     TriggerTemplateSpec,
+    TriggerBinding,
+    yaml_dump,
 )
 from .t import TT
 
