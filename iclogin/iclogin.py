@@ -3,10 +3,9 @@ import json
 import subprocess
 from pathlib import Path
 
-
-def log_command(command, **kwargs):
-    click.echo(" ".join(command) + "    " + kwargs.get("delimiter", ""))
-    if kwargs.get("dry_run", False):
+def log_command(command, print_output=True, dry_run=False, delimiter=""):
+    click.echo(" ".join(command) + "    " + delimiter)
+    if dry_run:
         return
     stdout = ""
     try:
@@ -14,7 +13,7 @@ def log_command(command, **kwargs):
         stdout = out.decode()
     except subprocess.CalledProcessError:
         click.echo("*** Command execution failed")
-    if kwargs.get("print_output", True):
+    if print_output:
         click.echo(stdout)
     return stdout
 
@@ -26,11 +25,7 @@ def default_dir():
 suffixes_long_to_short = (".apiKey.json", ".json", "")
 
 
-def dumpf(f, shortf, endswith):
-    login(f, True)
-
-
-def list_all(defaultdir, dump, dump_errors):
+def list_all(defaultdir, dump, output, dump_errors):
     (goods, errors) = parse_dir(defaultdir)
     if dump_errors:
         for (f, error) in errors:
@@ -117,32 +112,49 @@ def file_to_key(file):
         )
 
 
-def login(file, dump):
+def get_resource_group():
+      target = json.loads(log_command(["ibmcloud", "target", "--output", "json"], print_output=False))
+      if "resource_group" in target:
+        if "name" in target["resource_group"]:
+          return target["resource_group"]["name"]
+      return None
+
+def set_resource_group(resource_group):
+    log_command(["ibmcloud", "target", "-g", resource_group])
+
+def login(file, dump, output):
     (f, apikey, err) = find_target(default_dir(), file)
     if f == None:
         click.echo(err)
         return
     if dump:
-        click.echo(f"{apikey} {f.name}")
+        if output == "json":
+            click.echo(json.dumps({"apikey":f"{apikey}", "name": f"{f.name}"}))
+        else:
+            click.echo(f"{apikey} {f.name}")
     else:
         click.echo(f"using {str(f)}")
+        resource_group = get_resource_group()
         log_command(["ibmcloud", "login", "--apikey", apikey])
+        if resource_group:
+          set_resource_group(resource_group)
 
 
 @click.command()
 @click.argument("target", nargs=1, required=False)
 @click.option("-d", "--dump", is_flag=True, help="dump just the api keys, do not login")
+@click.option("-o", "--output", type=click.Choice(['json', 'text'], case_sensitive=False), default="text")
 @click.option("-e", "--dump_errors", is_flag=True, help="dump errors")
-def cli(target, dump, dump_errors):
+def cli(target, dump, dump_errors, output):
     """Simplify the login process by using apikeys, eventually it will: ibmcloud login --apikey x
 
     TARGET - name in the HOME/apikey direcgory appending .apiKey.json and .json, or provide a full path name
     if no TARGET provided then list all targets in ~/apikeys dir
     """
     if target == None:
-        list_all(default_dir(), dump, dump_errors)
+        list_all(default_dir(), dump, output, dump_errors)
         return
-    login(target, dump)
+    login(target, dump, output)
 
 
 if __name__ == "__main__":
